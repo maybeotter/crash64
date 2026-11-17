@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Machine-local dependencies, private assets, and development notes
+/.local/
+
+# Build outputs
+/build/
+/filesystem/
+*.z64
+*.elf
+*.map
+

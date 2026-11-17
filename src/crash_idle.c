@@ -4,7 +4,7 @@
 #include <math.h>
 
 #define ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
-#define PS1_ANGLE_TO_RADIANS(value) ((float)(value) * (2.0f * M_PI / 4096.0f))
+#define ANGLE_TO_RADIANS(value) ((float)(value) * (2.0f * M_PI / 4096.0f))
 
 typedef struct {
   uint8_t pose;
@@ -380,7 +380,7 @@ void crash_idle_update(CrashIdleController *idle, bool player_moving) {
   }
 
   if (idle->phase == PHASE_RARE_WIBL) {
-    idle->spin_yaw += idle->spin_direction * PS1_ANGLE_TO_RADIANS(0x1C7);
+    idle->spin_yaw += idle->spin_direction * ANGLE_TO_RADIANS(0x1C7);
   }
   if (idle->ticks_remaining > 0) --idle->ticks_remaining;
   while (idle->ticks_remaining == 0) {

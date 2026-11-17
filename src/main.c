@@ -8,6 +8,7 @@
 #include <t3d/t3dmodel.h>
 
 #include "crash_idle.h"
+#include "crash_jump.h"
 #include "crash_pose.h"
 #include "crash_walk.h"
 
@@ -22,6 +23,8 @@
 #define CAMERA_TARGET_LEAD -2.0f
 #define CAMERA_FOV_DEGREES 50.0f
 #define GAME_TICK_SECONDS (1.0f / 30.0f)
+#define JUMP_INPUT_BUFFER_TICKS 2
+#define JUMP_POSE_KEY_BASE 0x4000u
 #define WALK_POSE_KEY_BASE 0x8000u
 
 #define MAX_SPEED 30.0f
@@ -31,6 +34,24 @@
 #define DECEL_PER_SECOND (MAX_SPEED / DECEL_TIME_SECONDS)
 #define DIAGONAL_SPEED_SCALE (327.0f / 256.0f)
 #define LOW_SPEED_TURN_THRESHOLD (MAX_SPEED / 1600.0f)
+#define TICKS_PER_FRAME 34.0f
+#define MAX_SPEED_RAW 0x96000
+#define AIR_ACCEL_RAW 0x138800
+#define AIR_DECEL_RAW 0x9C400
+#define AIR_TURN_RATE_RAW 0xF00
+#define AIR_REVERSE_THRESHOLD_RAW 0x7C8
+#define RAW_SPEED_TO_WORLD (MAX_SPEED / MAX_SPEED_RAW)
+#define AIR_ACCEL_PER_SECOND \
+  (AIR_ACCEL_RAW * TICKS_PER_FRAME / 1024.0f \
+   * RAW_SPEED_TO_WORLD / GAME_TICK_SECONDS)
+#define AIR_DECEL_PER_SECOND \
+  (AIR_DECEL_RAW * TICKS_PER_FRAME / 1024.0f \
+   * RAW_SPEED_TO_WORLD / GAME_TICK_SECONDS)
+#define AIR_TURN_RATE_RADIANS_PER_SECOND \
+  (AIR_TURN_RATE_RAW * TICKS_PER_FRAME / 1024.0f \
+   * (2.0f * T3D_PI / 4096.0f) / GAME_TICK_SECONDS)
+#define AIR_REVERSE_THRESHOLD_RADIANS \
+  (AIR_REVERSE_THRESHOLD_RAW * (2.0f * T3D_PI / 4096.0f))
 #define VERTEX_RGBA(r, g, b, a) \
   (((uint32_t)(r) << 24) | ((uint32_t)(g) << 16) | ((uint32_t)(b) << 8) | (uint32_t)(a))
 
@@ -41,10 +62,18 @@ typedef struct {
   float move_angle;
 } PlayerState;
 
-static const uint32_t BODY_CLIP_EIDS[] = {
+static const uint32_t IDLE_CLIP_EIDS[] = {
   0x7496C0F3, 0x7496C273, 0x7496C2F3, 0x7496C373, 0x74952DF3,
 };
-static_assert(ARRAY_COUNT(BODY_CLIP_EIDS) == CRASH_CLIP_WIBL);
+static_assert(ARRAY_COUNT(IDLE_CLIP_EIDS) == CRASH_CLIP_WIBL);
+
+static const uint32_t JUMP_CLIP_EIDS[] = {
+  CRASH_JUMP_WIF1_EID,
+  CRASH_JUMP_WIJU_EID,
+  CRASH_JUMP_WIJS_EID,
+  CRASH_JUMP_WITS_EID,
+};
+static_assert(ARRAY_COUNT(JUMP_CLIP_EIDS) == CRASH_JUMP_CLIP_COUNT);
 
 static float get_time_s(void) {
   return (float)((double)get_ticks_us() / 1000000.0);
@@ -66,25 +95,49 @@ static int axis_direction(int value) {
   return 0;
 }
 
-static bool player_update(PlayerState *player, joypad_inputs_t input, float dt) {
+static bool player_update(
+  PlayerState *player,
+  joypad_inputs_t input,
+  float dt,
+  bool airborne
+) {
   int dir_x = axis_direction(input.stick_x);
   int dir_z = -axis_direction(input.stick_y);
   bool has_input = dir_x != 0 || dir_z != 0;
 
   if (!has_input) {
-    player->speed -= DECEL_PER_SECOND * dt;
+    float deceleration = airborne ? AIR_DECEL_PER_SECOND : DECEL_PER_SECOND;
+    player->speed -= deceleration * dt;
     if (player->speed < 0.0f) player->speed = 0.0f;
   } else {
     float target_angle = atan2f((float)dir_x, (float)dir_z);
     float delta = fabsf(angle_delta(player->move_angle, target_angle));
 
-    if (player->speed > LOW_SPEED_TURN_THRESHOLD && delta > (T3D_PI * 0.5f)) {
+    if (airborne) {
+      player->speed += cosf(delta) * AIR_ACCEL_PER_SECOND * dt;
+      if (player->speed < 0.0f) player->speed = 0.0f;
+      if (player->speed <= LOW_SPEED_TURN_THRESHOLD) {
+        player->move_angle = target_angle;
+      } else if (delta < AIR_REVERSE_THRESHOLD_RADIANS) {
+        float turn = clampf(
+          angle_delta(player->move_angle, target_angle),
+          -AIR_TURN_RATE_RADIANS_PER_SECOND * dt,
+          AIR_TURN_RATE_RADIANS_PER_SECOND * dt
+        );
+        player->move_angle += turn;
+      } else {
+        player->speed -= AIR_DECEL_PER_SECOND * dt;
+        if (player->speed < 0.0f) player->speed = 0.0f;
+      }
+    } else if (
+      player->speed > LOW_SPEED_TURN_THRESHOLD && delta > (T3D_PI * 0.5f)
+    ) {
       player->speed = 0.0f;
     } else {
       player->move_angle = target_angle;
       player->speed += ACCEL_PER_SECOND * dt;
-      if (player->speed > MAX_SPEED) player->speed = MAX_SPEED;
     }
+    if (player->speed > MAX_SPEED) player->speed = MAX_SPEED;
   }
 
   bool is_diagonal = has_input && dir_x != 0 && dir_z != 0;
@@ -155,10 +208,15 @@ int main(void) {
   assertf(spin_model->totalVertCount == spin_poses.render_vertex_count,
           "Spin model/pose vertex counts differ");
 
-  int body_clip_indices[ARRAY_COUNT(BODY_CLIP_EIDS)];
-  for (size_t index = 0; index < ARRAY_COUNT(BODY_CLIP_EIDS); ++index) {
-    body_clip_indices[index] = crash_pose_find_clip(&body_poses, BODY_CLIP_EIDS[index]);
-    assertf(body_clip_indices[index] >= 0, "Body pose clip is missing");
+  int idle_clip_indices[ARRAY_COUNT(IDLE_CLIP_EIDS)];
+  for (size_t index = 0; index < ARRAY_COUNT(IDLE_CLIP_EIDS); ++index) {
+    idle_clip_indices[index] = crash_pose_find_clip(&body_poses, IDLE_CLIP_EIDS[index]);
+    assertf(idle_clip_indices[index] >= 0, "Idle pose clip is missing");
+  }
+  int jump_clip_indices[ARRAY_COUNT(JUMP_CLIP_EIDS)];
+  for (size_t index = 0; index < ARRAY_COUNT(JUMP_CLIP_EIDS); ++index) {
+    jump_clip_indices[index] = crash_pose_find_clip(&body_poses, JUMP_CLIP_EIDS[index]);
+    assertf(jump_clip_indices[index] >= 0, "Jump pose clip is missing");
   }
   int spin_clip_index = crash_pose_find_clip(&spin_poses, 0x7494AAF3);
   assertf(spin_clip_index >= 0, "Spin pose clip is missing");
@@ -185,7 +243,10 @@ int main(void) {
   crash_idle_init(&idle, 12345);
   CrashWalkController walk;
   crash_walk_init(&walk);
+  CrashJumpController jump;
+  crash_jump_init(&jump);
   int frame_index = 0;
+  uint8_t jump_input_buffer = 0;
   bool cull_inverted = false;
   float last_time = get_time_s();
   float game_tick_accumulator = 0.0f;
@@ -199,22 +260,49 @@ int main(void) {
     last_time = now;
     joypad_inputs_t input = joypad_get_inputs(JOYPAD_PORT_1);
     joypad_buttons_t pressed = joypad_get_buttons_pressed(JOYPAD_PORT_1);
-    bool has_input = player_update(&player, input, dt);
+    joypad_buttons_t held = joypad_get_buttons_held(JOYPAD_PORT_1);
+    bool has_input = player_update(
+      &player, input, dt, crash_jump_is_airborne(&jump)
+    );
 
     bool player_moving = has_input || player.speed > LOW_SPEED_TURN_THRESHOLD;
-    if (pressed.c_up && !player_moving) {
+    if (pressed.a) jump_input_buffer = JUMP_INPUT_BUFFER_TICKS;
+    if (pressed.c_up && !player_moving && !jump.active) {
       crash_idle_force_rare(&idle);
     }
     game_tick_accumulator += dt;
     while (game_tick_accumulator >= GAME_TICK_SECONDS) {
-      bool was_walking = walk.active;
-      crash_walk_update(&walk, player_moving);
-      if (was_walking && !walk.active) idle.mirror_x = walk.mirror_x;
-      crash_idle_update(&idle, player_moving);
+      if (jump_input_buffer > 0 && crash_jump_can_start(&jump)) {
+        bool from_walk = !jump.active && walk.active;
+        int8_t mirror_x = jump.active
+          ? jump.mirror_x
+          : (walk.active ? walk.mirror_x : idle.mirror_x);
+        crash_jump_start(&jump, from_walk, mirror_x);
+        jump_input_buffer = 0;
+      } else if (jump_input_buffer > 0) {
+        --jump_input_buffer;
+      }
+
+      if (jump.active) {
+        crash_walk_update(&walk, false);
+        crash_idle_update(&idle, true);
+        crash_jump_update(&jump, held.a, has_input);
+        if (!jump.active) {
+          idle.mirror_x = jump.mirror_x;
+          if (player_moving) crash_walk_update(&walk, true);
+        }
+      } else {
+        bool was_walking = walk.active;
+        crash_walk_update(&walk, player_moving);
+        if (was_walking && !walk.active) idle.mirror_x = walk.mirror_x;
+        crash_idle_update(&idle, player_moving);
+      }
       game_tick_accumulator -= GAME_TICK_SECONDS;
     }
 
-    int8_t render_mirror_x = walk.active ? walk.mirror_x : idle.mirror_x;
+    int8_t render_mirror_x = jump.active
+      ? jump.mirror_x
+      : (walk.active ? walk.mirror_x : idle.mirror_x);
 
     fm_vec3_t camera_position = {{player.x, CAMERA_HEIGHT, player.z + CAMERA_DISTANCE}};
     fm_vec3_t camera_target = {{player.x, CAMERA_TARGET_HEIGHT, player.z + CAMERA_TARGET_LEAD}};
@@ -231,8 +319,12 @@ int main(void) {
         PLAYER_MODEL_SCALE,
         PLAYER_MODEL_SCALE,
       },
-      (float[3]){0.0f, -player.move_angle + idle.spin_yaw, 0.0f},
-      (float[3]){player.x, 0.0f, player.z}
+      (float[3]){
+        0.0f,
+        -player.move_angle + (jump.active ? 0.0f : idle.spin_yaw),
+        0.0f,
+      },
+      (float[3]){player.x, jump.y, player.z}
     );
 
     rdpq_attach(display_get(), display_get_zbuf());
@@ -264,7 +356,22 @@ int main(void) {
 
     rspq_block_run(draw_plane);
     t3d_matrix_push(&player_matrices[frame_index]);
-    if (walk.active) {
+    if (jump.active) {
+      uint16_t pose_key = JUMP_POSE_KEY_BASE
+        | ((uint16_t)jump.clip << 8)
+        | jump.pose;
+      if (body_buffer_pose[frame_index] != pose_key) {
+        crash_pose_apply(
+          &body_poses,
+          jump_clip_indices[jump.clip],
+          jump.pose,
+          body_vertex_buffers[frame_index]
+        );
+        body_buffer_pose[frame_index] = pose_key;
+      }
+      t3d_segment_set(T3D_SEGMENT_1, body_vertex_buffers[frame_index]);
+      rspq_block_run(draw_body);
+    } else if (walk.active) {
       uint16_t pose_key = WALK_POSE_KEY_BASE | walk.pose;
       if (body_buffer_pose[frame_index] != pose_key) {
         crash_pose_apply(
@@ -285,7 +392,7 @@ int main(void) {
       t3d_segment_set(T3D_SEGMENT_1, spin_vertex_buffers[frame_index]);
       rspq_block_run(draw_spin);
     } else {
-      int clip_index = body_clip_indices[idle.clip];
+      int clip_index = idle_clip_indices[idle.clip];
       uint16_t pose_key = ((uint16_t)idle.clip << 8) | idle.pose;
       if (body_buffer_pose[frame_index] != pose_key) {
         crash_pose_apply(

@@ -5,9 +5,11 @@ This is an N64 port of Crash Bandicoot!
 ## Current progress
 (Applies to same commit of this README.)
 
-Crash moves in eight directions around a flat test level with a follow camera.
-The idle and walk animations are implemented.
-C-up triggers wumpa idla animation.
+Crash walking and jumping in a flat test level with a following camera. Idle, jump and walk animations are in. 
+
+Control Stick: Movement
+A: Jump 
+C-Up: manually triggers the Wumpa idle animation
 
 ## Notice
 

@@ -19,6 +19,10 @@ TOPOLOGIES = {
         "clips": (
             (0x7496C0F3, SOURCE / "idle", 13),
             (0x74974573, SOURCE / "animations/WiWaV", 10),
+            (0x749520F3, SOURCE / "animations/WiF1V", 4),
+            (0x7495AF73, SOURCE / "animations/WiJuV", 17),
+            (0x7495BB73, SOURCE / "animations/WiJSV", 6),
+            (0x7496FB73, SOURCE / "animations/WiTSV", 5),
             (0x7496C273, SOURCE / "animations/WiS4V", 25),
             (0x7496C2F3, SOURCE / "animations/WiS5V", 25),
             (0x7496C373, SOURCE / "animations/WiS6V", 20),

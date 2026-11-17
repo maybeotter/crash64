@@ -5,7 +5,9 @@ This is an N64 port of Crash Bandicoot!
 ## Current progress
 (Applies to same commit of this README.)
 
-Crash moves in eight directions around a flat test level and a camera following him. Idle animations are in, press C-up to see the wumpa fruit idle animation. 
+Crash moves in eight directions around a flat test level with a follow camera.
+The idle and walk animations are implemented.
+C-up triggers wumpa idla animation.
 
 ## Notice
 

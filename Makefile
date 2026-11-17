@@ -11,7 +11,7 @@ include $(T3D_INST)/t3d.mk
 
 N64_CFLAGS += -std=gnu2x -O2 -Wall -Wextra
 
-src := src/main.c src/crash_idle.c src/crash_pose.c
+src := src/main.c src/crash_idle.c src/crash_walk.c src/crash_pose.c
 
 assets_png := $(wildcard $(ASSET_DIR)/generated/textures/*.png)
 assets_sprites := $(addprefix filesystem/,$(notdir $(assets_png:%.png=%.sprite)))
@@ -19,6 +19,7 @@ assets_gltf := $(ASSET_DIR)/generated/models/crash_body.glb \
 	$(ASSET_DIR)/generated/models/crash_spin.glb
 assets_models := filesystem/crash_body.t3dm filesystem/crash_spin.t3dm
 body_pose_objs := $(wildcard $(ASSET_DIR)/private/source/crash/idle/*.obj) \
+	$(wildcard $(ASSET_DIR)/private/source/crash/animations/WiWaV/*.obj) \
 	$(wildcard $(ASSET_DIR)/private/source/crash/animations/WiS4V/*.obj) \
 	$(wildcard $(ASSET_DIR)/private/source/crash/animations/WiS5V/*.obj) \
 	$(wildcard $(ASSET_DIR)/private/source/crash/animations/WiS6V/*.obj) \
@@ -66,6 +67,9 @@ test-host:
 	$(HOST_CC) -std=gnu2x -Wall -Wextra -Werror -I$(TEST_DIR)/stubs -Isrc \
 		src/crash_idle.c $(TEST_DIR)/crash_idle_test.c -lm -o /tmp/crash64-idle-test
 	/tmp/crash64-idle-test
+	$(HOST_CC) -std=gnu2x -Wall -Wextra -Werror -Isrc \
+		src/crash_walk.c $(TEST_DIR)/crash_walk_test.c -o /tmp/crash64-walk-test
+	/tmp/crash64-walk-test
 
 -include $(wildcard $(BUILD_DIR)/*.d)
 

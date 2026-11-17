@@ -9,6 +9,7 @@
 
 #include "crash_idle.h"
 #include "crash_pose.h"
+#include "crash_walk.h"
 
 #define ARRAY_COUNT(values) (sizeof(values) / sizeof((values)[0]))
 #define FB_COUNT 3
@@ -21,6 +22,7 @@
 #define CAMERA_TARGET_LEAD -2.0f
 #define CAMERA_FOV_DEGREES 50.0f
 #define GAME_TICK_SECONDS (1.0f / 30.0f)
+#define WALK_POSE_KEY_BASE 0x8000u
 
 #define MAX_SPEED 30.0f
 #define ACCEL_TIME_SECONDS (7.23f / 30.0f)
@@ -160,6 +162,8 @@ int main(void) {
   }
   int spin_clip_index = crash_pose_find_clip(&spin_poses, 0x7494AAF3);
   assertf(spin_clip_index >= 0, "Spin pose clip is missing");
+  int walk_clip_index = crash_pose_find_clip(&body_poses, CRASH_WALK_CLIP_EID);
+  assertf(walk_clip_index >= 0, "Walk pose clip is missing");
 
   init_plane_vertices(plane_vertices);
   t3d_mat4fp_identity(plane_matrix);
@@ -179,6 +183,8 @@ int main(void) {
   uint16_t spin_buffer_pose[FB_COUNT] = {UINT16_MAX, UINT16_MAX, UINT16_MAX};
   CrashIdleController idle;
   crash_idle_init(&idle, 12345);
+  CrashWalkController walk;
+  crash_walk_init(&walk);
   int frame_index = 0;
   bool cull_inverted = false;
   float last_time = get_time_s();
@@ -201,9 +207,14 @@ int main(void) {
     }
     game_tick_accumulator += dt;
     while (game_tick_accumulator >= GAME_TICK_SECONDS) {
+      bool was_walking = walk.active;
+      crash_walk_update(&walk, player_moving);
+      if (was_walking && !walk.active) idle.mirror_x = walk.mirror_x;
       crash_idle_update(&idle, player_moving);
       game_tick_accumulator -= GAME_TICK_SECONDS;
     }
+
+    int8_t render_mirror_x = walk.active ? walk.mirror_x : idle.mirror_x;
 
     fm_vec3_t camera_position = {{player.x, CAMERA_HEIGHT, player.z + CAMERA_DISTANCE}};
     fm_vec3_t camera_target = {{player.x, CAMERA_TARGET_HEIGHT, player.z + CAMERA_TARGET_LEAD}};
@@ -216,7 +227,7 @@ int main(void) {
     t3d_mat4fp_from_srt_euler(
       &player_matrices[frame_index],
       (float[3]){
-        PLAYER_MODEL_SCALE * idle.mirror_x,
+        PLAYER_MODEL_SCALE * render_mirror_x,
         PLAYER_MODEL_SCALE,
         PLAYER_MODEL_SCALE,
       },
@@ -226,7 +237,7 @@ int main(void) {
 
     rdpq_attach(display_get(), display_get_zbuf());
     t3d_frame_start();
-    bool mirror_x = idle.mirror_x < 0;
+    bool mirror_x = render_mirror_x < 0;
     if (mirror_x != cull_inverted) {
       t3d_state_set_cull_invert(mirror_x);
       cull_inverted = mirror_x;
@@ -253,7 +264,17 @@ int main(void) {
 
     rspq_block_run(draw_plane);
     t3d_matrix_push(&player_matrices[frame_index]);
-    if (idle.clip == CRASH_CLIP_WIBL) {
+    if (walk.active) {
+      uint16_t pose_key = WALK_POSE_KEY_BASE | walk.pose;
+      if (body_buffer_pose[frame_index] != pose_key) {
+        crash_pose_apply(
+          &body_poses, walk_clip_index, walk.pose, body_vertex_buffers[frame_index]
+        );
+        body_buffer_pose[frame_index] = pose_key;
+      }
+      t3d_segment_set(T3D_SEGMENT_1, body_vertex_buffers[frame_index]);
+      rspq_block_run(draw_body);
+    } else if (idle.clip == CRASH_CLIP_WIBL) {
       uint16_t pose_key = idle.pose;
       if (spin_buffer_pose[frame_index] != pose_key) {
         crash_pose_apply(

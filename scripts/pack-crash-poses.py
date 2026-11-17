@@ -18,6 +18,7 @@ TOPOLOGIES = {
         "source_vertices": 381,
         "clips": (
             (0x7496C0F3, SOURCE / "idle", 13),
+            (0x74974573, SOURCE / "animations/WiWaV", 10),
             (0x7496C273, SOURCE / "animations/WiS4V", 25),
             (0x7496C2F3, SOURCE / "animations/WiS5V", 25),
             (0x7496C373, SOURCE / "animations/WiS6V", 20),

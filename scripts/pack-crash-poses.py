@@ -23,6 +23,7 @@ TOPOLOGIES = {
             (0x7495AF73, SOURCE / "animations/WiJuV", 17),
             (0x7495BB73, SOURCE / "animations/WiJSV", 6),
             (0x7496FB73, SOURCE / "animations/WiTSV", 5),
+            (0x74955B73, SOURCE / "animations/WiGSV", 6),
             (0x7496C273, SOURCE / "animations/WiS4V", 25),
             (0x7496C2F3, SOURCE / "animations/WiS5V", 25),
             (0x7496C373, SOURCE / "animations/WiS6V", 20),
@@ -61,8 +62,8 @@ def parse_obj(path: Path):
     return vertices, normals, faces
 
 
-def body_origin() -> tuple[float, float, float]:
-    vertices, _, faces = parse_obj(BODY_BASIS)
+def mesh_origin(path: Path) -> tuple[float, float, float]:
+    vertices, _, faces = parse_obj(path)
     used = {vertex for face in faces for vertex in face}
     return (
         (min(vertices[index][0] for index in used) + max(vertices[index][0] for index in used))
@@ -205,7 +206,7 @@ def main() -> None:
 
     spec = TOPOLOGIES[args.topology]
     basis_path = spec["clips"][0][1] / "01.obj"
-    origin = body_origin()
+    origin = mesh_origin(BODY_BASIS if args.topology == "body" else basis_path)
     model_vertices = read_t3dm_vertices(args.model)
     render_map = build_render_map(
         model_vertices,

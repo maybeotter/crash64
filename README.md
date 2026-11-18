@@ -5,11 +5,14 @@ This is an N64 port of Crash Bandicoot!
 ## Current progress
 (Applies to same commit of this README.)
 
-Crash walking and jumping in a flat test level with a following camera. Idle, jump and walk animations are in. 
+Crash can walk, jump, and perform the retail ground/air spin in a flat test
+level with a following camera. Idle, walk, jump, landing, spin, and spin
+recovery animations are in, along with the retail rejected-spin cue.
 
-Control Stick: Movement
-A: Jump 
-C-Up: manually triggers the Wumpa idle animation
+- Control Stick: movement
+- A: jump
+- B: spin
+- C-Up: manually trigger the Wumpa idle animation
 
 ## Notice
 

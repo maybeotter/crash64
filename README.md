@@ -3,6 +3,9 @@
 This is an N64 port of Crash Bandicoot!
 
 ## Current progress
+
+![screenshot of crash64](screenshot.jpg)
+
 (Applies to same commit of this README.)
 
 Crash can walk, jump, and spin in the first level chunk of N. Sanity Beach. Camera follows him.

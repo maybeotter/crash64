@@ -18,8 +18,8 @@
 #define PLAYER_BOUND 88.0f
 #define STICK_DEAD_ZONE 24
 #define PLAYER_MODEL_SCALE 0.096f
-#define CAMERA_HEIGHT 24.0f
-#define CAMERA_DISTANCE 34.0f
+#define CAMERA_HEIGHT 17.0f
+#define CAMERA_DISTANCE 24.0f
 #define CAMERA_TARGET_HEIGHT 5.0f
 #define CAMERA_TARGET_LEAD -2.0f
 #define CAMERA_FOV_DEGREES 50.0f
@@ -56,8 +56,6 @@
    * (2.0f * T3D_PI / 4096.0f) / GAME_TICK_SECONDS)
 #define AIR_REVERSE_THRESHOLD_RADIANS \
   (AIR_REVERSE_THRESHOLD_RAW * (2.0f * T3D_PI / 4096.0f))
-#define VERTEX_RGBA(r, g, b, a) \
-  (((uint32_t)(r) << 24) | ((uint32_t)(g) << 16) | ((uint32_t)(b) << 8) | (uint32_t)(a))
 #define SPIN_REJECT_CHANNEL 0
 #define SPIN_REJECT_VOLUME (0x666 / (float)0x3FFF)
 #define SPIN_REJECT_BASE_RATE 11025.0f
@@ -173,18 +171,6 @@ static bool player_update(
   return has_input;
 }
 
-static void init_plane_vertices(T3DVertPacked *vertices) {
-  uint16_t normal = t3d_vert_pack_normal(&(fm_vec3_t){{0.0f, 1.0f, 0.0f}});
-  vertices[0] = (T3DVertPacked){
-    .posA = {-96, 0, -96}, .rgbaA = VERTEX_RGBA(72, 104, 70, 255), .normA = normal,
-    .posB = {-96, 0,  96}, .rgbaB = VERTEX_RGBA(88, 120, 82, 255), .normB = normal,
-  };
-  vertices[1] = (T3DVertPacked){
-    .posA = { 96, 0,  96}, .rgbaA = VERTEX_RGBA(72, 104, 70, 255), .normA = normal,
-    .posB = { 96, 0, -96}, .rgbaB = VERTEX_RGBA(88, 120, 82, 255), .normB = normal,
-  };
-}
-
 static rspq_block_t *prepare_dynamic_model(
   T3DModel *model,
   T3DVertPacked *vertex_buffers[FB_COUNT]
@@ -235,9 +221,9 @@ int main(void) {
   t3d_init((T3DInitParams){});
 
   T3DViewport viewport = t3d_viewport_create_buffered(FB_COUNT);
-  T3DMat4FP *plane_matrix = malloc_uncached(sizeof(T3DMat4FP));
+  T3DMat4FP *level_matrix = malloc_uncached(sizeof(T3DMat4FP));
   T3DMat4FP *player_matrices = malloc_uncached(sizeof(T3DMat4FP) * FB_COUNT);
-  T3DVertPacked *plane_vertices = malloc_uncached(sizeof(T3DVertPacked) * 2);
+  T3DModel *level_model = t3d_model_load("rom:/nsanity_start.t3dm");
   T3DModel *body_model = t3d_model_load("rom:/crash_body.t3dm");
   T3DModel *spin_model = t3d_model_load("rom:/crash_spin.t3dm");
   configure_spin_materials(spin_model);
@@ -268,8 +254,7 @@ int main(void) {
   );
   assertf(spin_recovery_clip_index >= 0, "Spin recovery pose clip is missing");
 
-  init_plane_vertices(plane_vertices);
-  t3d_mat4fp_identity(plane_matrix);
+  t3d_mat4fp_identity(level_matrix);
 
   uint8_t ambient[4] = {86, 86, 94, 255};
   uint8_t sun_color[4] = {210, 196, 170, 255};
@@ -277,7 +262,11 @@ int main(void) {
   fm_vec3_norm(&sun_direction, &sun_direction);
 
   PlayerState player = {.move_angle = 0.0f};
-  rspq_block_t *draw_plane = NULL;
+  rspq_block_begin();
+  t3d_matrix_push(level_matrix);
+  t3d_model_draw(level_model);
+  t3d_matrix_pop(1);
+  rspq_block_t *draw_level = rspq_block_end();
   T3DVertPacked *body_vertex_buffers[FB_COUNT];
   T3DVertPacked *spin_vertex_buffers[FB_COUNT];
   rspq_block_t *draw_body = prepare_dynamic_model(body_model, body_vertex_buffers);
@@ -445,18 +434,7 @@ int main(void) {
     t3d_light_set_count(1);
     t3d_state_set_drawflags(T3D_FLAG_SHADED | T3D_FLAG_DEPTH);
 
-    if (!draw_plane) {
-      rspq_block_begin();
-      t3d_matrix_push(plane_matrix);
-      t3d_vert_load(plane_vertices, 0, 4);
-      t3d_matrix_pop(1);
-      t3d_tri_draw(0, 1, 2);
-      t3d_tri_draw(2, 3, 0);
-      t3d_tri_sync();
-      draw_plane = rspq_block_end();
-    }
-
-    rspq_block_run(draw_plane);
+    rspq_block_run(draw_level);
     t3d_matrix_push(&player_matrices[frame_index]);
     if (crash_spin_uses_spin_mesh(&spin)) {
       uint16_t pose_key = spin.pose;

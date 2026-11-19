@@ -5,9 +5,7 @@ This is an N64 port of Crash Bandicoot!
 ## Current progress
 (Applies to same commit of this README.)
 
-Crash can walk, jump, and perform the retail ground/air spin in a flat test
-level with a following camera. Idle, walk, jump, landing, spin, and spin
-recovery animations are in, along with the retail rejected-spin cue.
+Crash can walk, jump, and spin in the first level chunk of N. Sanity Beach. Camera follows him.
 
 - Control Stick: movement
 - A: jump

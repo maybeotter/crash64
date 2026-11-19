@@ -16,8 +16,10 @@ src := src/main.c src/crash_idle.c src/crash_walk.c src/crash_jump.c src/crash_s
 assets_png := $(wildcard $(ASSET_DIR)/generated/textures/*.png)
 assets_sprites := $(addprefix filesystem/,$(notdir $(assets_png:%.png=%.sprite)))
 assets_gltf := $(ASSET_DIR)/generated/models/crash_body.glb \
-	$(ASSET_DIR)/generated/models/crash_spin.glb
-assets_models := filesystem/crash_body.t3dm filesystem/crash_spin.t3dm
+	$(ASSET_DIR)/generated/models/crash_spin.glb \
+	$(ASSET_DIR)/generated/models/nsanity_start.glb
+assets_models := filesystem/crash_body.t3dm filesystem/crash_spin.t3dm \
+	filesystem/nsanity_start.t3dm
 assets_wav := $(ASSET_DIR)/generated/audio/spin_reject.wav
 assets_audio := filesystem/spin_reject.wav64
 body_pose_objs := $(wildcard $(ASSET_DIR)/private/source/crash/idle/*.obj) \

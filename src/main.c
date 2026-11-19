@@ -18,9 +18,10 @@
 #define PLAYER_BOUND 88.0f
 #define STICK_DEAD_ZONE 24
 #define PLAYER_MODEL_SCALE 0.096f
-#define CAMERA_HEIGHT 17.0f
-#define CAMERA_DISTANCE 24.0f
-#define CAMERA_TARGET_HEIGHT 5.0f
+#define CAMERA_HEIGHT 13.0f
+#define CAMERA_DISTANCE 28.5f
+#define CAMERA_LATERAL_OFFSET 1.2f
+#define CAMERA_TARGET_HEIGHT 10.5f
 #define CAMERA_TARGET_LEAD -2.0f
 #define CAMERA_FOV_DEGREES 50.0f
 #define GAME_TICK_SECONDS (1.0f / 30.0f)
@@ -389,8 +390,16 @@ int main(void) {
          ? jump.mirror_x
          : (walk.active ? walk.mirror_x : idle.mirror_x));
 
-    fm_vec3_t camera_position = {{player.x, CAMERA_HEIGHT, player.z + CAMERA_DISTANCE}};
-    fm_vec3_t camera_target = {{player.x, CAMERA_TARGET_HEIGHT, player.z + CAMERA_TARGET_LEAD}};
+    fm_vec3_t camera_position = {{
+      player.x + CAMERA_LATERAL_OFFSET,
+      CAMERA_HEIGHT,
+      player.z + CAMERA_DISTANCE,
+    }};
+    fm_vec3_t camera_target = {{
+      player.x + CAMERA_LATERAL_OFFSET,
+      CAMERA_TARGET_HEIGHT,
+      player.z + CAMERA_TARGET_LEAD,
+    }};
     t3d_viewport_set_projection(
       &viewport, T3D_DEG_TO_RAD(CAMERA_FOV_DEGREES), 3.0f, 220.0f
     );
